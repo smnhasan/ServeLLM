@@ -1,0 +1,86 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+# ──────────────────────────────────────────────────────────────────────────────
+[project]
+name        = "llm-serve"
+version     = "2.0.0"
+description = "OpenAI-compatible API server for GPT-OSS-20B + multilingual-e5-large + instructor-large"
+readme      = "README.md"
+license     = { text = "MIT" }
+requires-python = ">=3.9"
+
+keywords = [
+    "llm", "openai", "api", "server", "embeddings",
+    "llama-cpp", "sentence-transformers", "ngrok",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
+
+# Core dependencies (GPU-specific llama-cpp-python installed separately — see README)
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.0",
+    "huggingface-hub>=0.23.0",
+    "sentence-transformers>=2.7.0",
+    "InstructorEmbedding>=1.0.1",
+    "torch>=2.0.0",
+    "numpy>=1.24.0",
+    "pyngrok>=7.0.0",
+    "requests>=2.31.0",
+    "nest-asyncio>=1.6.0",
+]
+
+[project.optional-dependencies]
+# Install llama-cpp-python with CUDA 12.2 wheel (Kaggle / Colab default)
+cuda122 = [
+    "llama-cpp-python @ https://github.com/abetlen/llama-cpp-python/releases/download/v0.2.90/llama_cpp_python-0.2.90-cp311-cp311-linux_x86_64.whl",
+]
+# CPU-only llama-cpp-python (slower, no GPU)
+cpu = [
+    "llama-cpp-python",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",          # async test client for FastAPI
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+llm-serve = "llm_serve.cli:main"
+
+[project.urls]
+Homepage   = "https://github.com/your-org/llm-serve"
+Issues     = "https://github.com/your-org/llm-serve/issues"
+
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.setuptools.packages.find]
+where = ["."]
+
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
