@@ -1,0 +1,16 @@
+INFO:     Started server process [568792]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+[LLM Serve] Starting up — version 1.0.0
+[LLM Serve] Dummy mode: True
+[LLM Serve] Rate limiting: True (60 RPM)
+INFO:     127.0.0.1:55740 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55740 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55756 - "POST /v1/chat/completions HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:34978 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34978 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52188 - "POST /v1/completions HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:52188 - "POST /v1/completions HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:37030 - "POST /v1/completions HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:37030 - "POST /v1/completions HTTP/1.1" 401 Unauthorized

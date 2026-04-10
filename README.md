@@ -1,278 +1,189 @@
-# llm-serve
+# LLM Serve
 
-> **OpenAI-compatible API server** for **GPT-OSS-20B** (chat & text completions) and two embedding models — all in one installable Python package.
-
----
-
-## Models
-
-| Role | Model | Dim | Notes |
-|------|-------|-----|-------|
-| LLM | `gpt-oss-20b` | — | GGUF via llama-cpp-python |
-| Embeddings | `intfloat/multilingual-e5-large` | 1024 | L2-normalised |
-| Embeddings | `hkunlp/instructor-large` | 768 | instruction-tuned, L2-normalised |
-
-## Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/v1/chat/completions` | OpenAI chat (streaming supported) |
-| `POST` | `/v1/completions` | OpenAI text completion (streaming supported) |
-| `POST` | `/v1/embeddings` | Embeddings, model-routed |
-| `GET`  | `/v1/models` | List available models |
-| `GET`  | `/health` | Health check |
+An **OpenAI-compatible LLM serving API** built with FastAPI. Drop-in replacement for the OpenAI API — works with any client library that supports a custom `base_url`.
 
 ---
 
-## Installation
+## Features
 
-### 1 — Clone & install (editable)
+| Feature | Details |
+|---|---|
+| **Auth** | Bearer token API key verification |
+| **Rate limiting** | Per-key sliding-window (configurable RPM) |
+| **Chat completions** | `POST /v1/chat/completions` — streaming + non-streaming |
+| **Text completions** | `POST /v1/completions` — legacy endpoint |
+| **Embeddings** | `POST /v1/embeddings` — deterministic dummy vectors |
+| **Model registry** | `GET /v1/models`, `GET /v1/models/{id}` — YAML-configurable |
+| **OpenAI schema** | Pydantic models matching the OpenAI API spec exactly |
+| **Dummy mode** | Fully functional without a real model — swap in vLLM/HF/Ollama later |
+
+---
+
+## Quickstart
 
 ```bash
+# 1. Clone and install
 git clone https://github.com/your-org/llm-serve.git
 cd llm-serve
-pip install -e ".[dev]"
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Configure
+cp .env.example .env
+# Edit .env — set your VALID_API_KEYS etc.
+
+# 3. Run
+uvicorn app.main:app --reload --port 8000
 ```
 
-### 2 — GPU-accelerated llama-cpp-python (CUDA 12.2 — Kaggle / Colab default)
-
-```bash
-pip install llama-cpp-python \
-    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu122 \
-    --no-cache-dir
-```
-
-For other CUDA versions or CPU-only, see the
-[llama-cpp-python docs](https://github.com/abetlen/llama-cpp-python).
-
-### 3 — CPU-only (slower)
-
-```bash
-pip install llama-cpp-python
-```
+API docs available at **http://localhost:8000/docs**
 
 ---
 
-## Quick Start
+## Usage
 
-### Python API
+### With curl
+
+```bash
+export API_KEY="sk-llmserve-test-key-1234"
+
+# List models
+curl http://localhost:8000/v1/models \
+  -H "Authorization: Bearer $API_KEY"
+
+# Chat completion
+curl http://localhost:8000/v1/chat/completions \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+
+# Streaming
+curl http://localhost:8000/v1/chat/completions \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-3.5-turbo", "messages": [{"role":"user","content":"Hi"}], "stream": true}'
+
+# Embeddings
+curl http://localhost:8000/v1/embeddings \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "text-embedding-ada-002", "input": "Hello world"}'
+```
+
+### With the OpenAI Python SDK
 
 ```python
-from llm_serve import start_server_and_keep_alive
+from openai import OpenAI
 
-# Blocking — keeps Kaggle / Colab session alive
-start_server_and_keep_alive(
-    authtoken="YOUR_NGROK_TOKEN",   # or set NGROK_AUTHTOKEN env var
-    port=8001,
-    max_hours=12,
+client = OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="sk-llmserve-test-key-1234",
 )
-```
 
-For interactive / testing use:
+# Chat
+response = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": "What is FastAPI?"}],
+)
+print(response.choices[0].message.content)
 
-```python
-from llm_serve import start_server_only
+# Streaming
+stream = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Tell me a joke"}],
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="", flush=True)
 
-manager, server = start_server_only(authtoken="YOUR_NGROK_TOKEN")
-print(manager.get_public_url())
-
-# … do testing …
-
-manager.stop()
-```
-
-### CLI
-
-```bash
-# Blocking (recommended for Kaggle)
-llm-serve start --authtoken YOUR_TOKEN --port 8001 --max-hours 12
-
-# Non-blocking (returns immediately — for quick tests)
-llm-serve start --authtoken YOUR_TOKEN --no-keep-alive
-
-# CPU-only, custom context
-llm-serve start --authtoken YOUR_TOKEN --n-gpu-layers 0 --n-ctx 4096
-```
-
-Full option list:
-
-```
-llm-serve start --help
-```
-
----
-
-## API Reference
-
-### Chat completions
-
-```bash
-curl -s https://YOUR_NGROK_URL/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-oss-20b",
-    "messages": [
-      {"role": "system",  "content": "You are a helpful assistant."},
-      {"role": "user",    "content": "What is machine learning?"}
-    ],
-    "max_tokens": 150,
-    "temperature": 0.7
-  }'
-```
-
-Streaming (`"stream": true`) is supported — responses are delivered as
-Server-Sent Events in the standard OpenAI chunk format.
-
----
-
-### Text completions
-
-```bash
-curl -s https://YOUR_NGROK_URL/v1/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "gpt-oss-20b", "prompt": "Once upon a time", "max_tokens": 100}'
-```
-
----
-
-### Embeddings
-
-#### multilingual-e5-large (dim = 1024)
-
-Prefix convention (caller's responsibility):
-
-| Use case | Prefix |
-|----------|--------|
-| Retrieval query | `"query: <text>"` |
-| Document / passage | `"passage: <text>"` |
-
-```bash
-# Single
-curl -s https://YOUR_NGROK_URL/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "intfloat/multilingual-e5-large",
-    "input": "query: What is artificial intelligence?"
-  }'
-
-# Batch (multilingual — English, Bengali, French)
-curl -s https://YOUR_NGROK_URL/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "intfloat/multilingual-e5-large",
-    "input": [
-      "passage: Artificial intelligence simulates human intelligence.",
-      "passage: মেশিন লার্নিং একটি কৃত্রিম বুদ্ধিমত্তার শাখা।",
-      "passage: L'\''apprentissage automatique est une branche de l'\''IA."
-    ]
-  }'
-```
-
-#### instructor-large (dim = 768)
-
-Pass an optional `instruction` field (applied uniformly to all texts).
-Defaults to `"Represent the sentence: "` when omitted.
-
-```bash
-curl -s https://YOUR_NGROK_URL/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "hkunlp/instructor-large",
-    "input": [
-      "Artificial intelligence simulates human intelligence.",
-      "Machine learning is a branch of AI."
-    ],
-    "instruction": "Represent the document for retrieval: "
-  }'
-```
-
-Response shape (both models):
-
-```json
-{
-  "object": "list",
-  "data": [
-    { "object": "embedding", "embedding": [0.023, -0.045, ...], "index": 0 }
-  ],
-  "model": "<model-id>",
-  "usage": { "prompt_tokens": 9, "total_tokens": 9 }
-}
+# Embeddings
+emb = client.embeddings.create(
+    model="text-embedding-ada-002",
+    input="The quick brown fox",
+)
+print(len(emb.data[0].embedding))  # 1536
 ```
 
 ---
 
 ## Configuration
 
-All defaults live in `llm_serve/config.py` and can be overridden at
-call time via keyword arguments or CLI flags.
+All settings live in `.env` (see `.env.example`):
 
-| Constant | Default | Description |
-|----------|---------|-------------|
-| `LLM_MODEL_REPO` | `ggml-org/gpt-oss-20b-GGUF` | HF repo for the GGUF |
-| `LLM_MODEL_FILE` | `gpt-oss-20b-mxfp4.gguf` | GGUF filename |
-| `DEFAULT_N_CTX` | `10048` | LLM context window |
-| `DEFAULT_N_GPU_LAYERS` | `-1` | GPU layers (-1 = all) |
-| `DEFAULT_MAX_REQUESTS` | `3` | Semaphore concurrency |
-| `DEFAULT_PORT` | `8000` | uvicorn port |
-| `DEFAULT_MAX_HOURS` | `12` | Keep-alive duration |
+| Variable | Default | Description |
+|---|---|---|
+| `VALID_API_KEYS` | `sk-llmserve-test-key-1234,...` | Comma-separated valid API keys |
+| `RATE_LIMIT_ENABLED` | `true` | Enable per-key rate limiting |
+| `RATE_LIMIT_RPM` | `60` | Requests per minute per key |
+| `DUMMY_MODE` | `true` | Use dummy responses (no real model) |
+| `DUMMY_LATENCY_MS` | `200` | Simulated inference latency |
+| `STREAM_CHUNK_DELAY_MS` | `50` | Delay between streamed tokens |
+| `MODELS_CONFIG_PATH` | `configs/models.yaml` | Path to custom model registry |
+| `DEBUG` | `false` | Enable FastAPI debug / auto-reload |
 
----
+### Adding models
 
-## Project Layout
+Edit `configs/models.yaml`:
 
-```
-llm_serve/
-├── llm_serve/
-│   ├── __init__.py          # public API + version
-│   ├── config.py            # all constants in one place
-│   ├── models/
-│   │   └── __init__.py      # Pydantic request schemas
-│   ├── backends/
-│   │   ├── __init__.py
-│   │   ├── llm.py           # LLMBackend (llama-cpp-python)
-│   │   └── embeddings.py    # E5Backend + InstructorBackend
-│   ├── routes/
-│   │   ├── __init__.py
-│   │   ├── chat.py          # /v1/chat/completions
-│   │   ├── completions.py   # /v1/completions
-│   │   └── embeddings.py    # /v1/embeddings
-│   ├── server.py            # CombinedServer (wires everything together)
-│   ├── tunnel.py            # NgrokTunnelManager
-│   ├── manager.py           # ServerManager (uvicorn thread + ngrok)
-│   ├── launch.py            # start_server_and_keep_alive / start_server_only
-│   └── cli.py               # llm-serve CLI entry point
-├── tests/
-│   ├── test_models.py       # Pydantic schema unit tests
-│   └── test_routes.py       # FastAPI route integration tests (mocked)
-├── examples/
-│   └── kaggle_notebook.py   # Drop-in replacement notebook
-├── pyproject.toml
-├── MANIFEST.in
-├── LICENSE
-└── README.md
+```yaml
+models:
+  - id: "my-custom-model"
+    owned_by: "my-org"
+    capabilities: ["chat"]
+    context_window: 32768
+    max_tokens: 32768
 ```
 
 ---
 
-## Development
+## Running Tests
 
 ```bash
-# Install with dev extras
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Lint + format
-ruff check llm_serve tests
-ruff format llm_serve tests
-
-# Type check
-mypy llm_serve
+pytest -v
 ```
 
 ---
 
-## License
+## Connecting a Real Model Backend
 
-MIT — see [LICENSE](LICENSE).
+1. Open `app/services/inference.py`
+2. Create a new class implementing `LLMEngine` (defined in `app/services/llm_engine.py`)
+3. Replace `dummy_engine` with your implementation in the routers
+
+Example backends to implement:
+- **vLLM**: `AsyncLLMEngine` via `vllm.engine.async_llm_engine`
+- **HuggingFace Transformers**: `AutoModelForCausalLM` + `pipeline`
+- **Ollama**: HTTP calls to `http://localhost:11434`
+- **LiteLLM**: Proxy to any supported provider
+
+---
+
+## Project Structure
+
+```
+llm-serve/
+├── app/
+│   ├── main.py              # FastAPI app, middleware, lifespan
+│   ├── dependencies.py      # Auth + rate limit FastAPI dependencies
+│   ├── routers/v1/
+│   │   ├── chat.py          # POST /v1/chat/completions
+│   │   ├── completions.py   # POST /v1/completions
+│   │   ├── models.py        # GET  /v1/models[/{id}]
+│   │   └── embeddings.py    # POST /v1/embeddings
+│   ├── schemas/openai.py    # Pydantic models (OpenAI-spec)
+│   ├── services/
+│   │   ├── llm_engine.py    # Abstract LLM interface
+│   │   ├── inference.py     # DummyInferenceEngine (swap for real)
+│   │   ├── model_manager.py # Model registry
+│   │   └── auth.py          # Auth + rate limiter
+│   ├── core/
+│   │   ├── config.py        # pydantic-settings
+│   │   └── security.py      # Key hashing helpers
+│   └── utils/helpers.py     # Streaming, token counting, errors
+├── configs/models.yaml      # Custom model registry
+├── tests/                   # pytest test suite
+└── .env.example
+```

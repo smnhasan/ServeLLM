@@ -1,0 +1,55 @@
+# LLM Serve — Model Registry
+# Add custom models here. These are merged with the built-in defaults.
+# Each model entry can override any field.
+
+models:
+  - id: "llama-3-8b"
+    owned_by: "meta"
+    created: 1713916800
+    capabilities:
+      - chat
+      - completions
+    context_window: 8192
+    max_tokens: 8192
+
+  - id: "llama-3-70b"
+    owned_by: "meta"
+    created: 1713916800
+    capabilities:
+      - chat
+    context_window: 8192
+    max_tokens: 8192
+
+  - id: "mistral-7b-instruct"
+    owned_by: "mistralai"
+    created: 1696118400
+    capabilities:
+      - chat
+      - completions
+    context_window: 32768
+    max_tokens: 32768
+
+  - id: "mixtral-8x7b-instruct"
+    owned_by: "mistralai"
+    created: 1703721600
+    capabilities:
+      - chat
+    context_window: 32768
+    max_tokens: 32768
+
+  - id: "phi-3-mini"
+    owned_by: "microsoft"
+    created: 1714176000
+    capabilities:
+      - chat
+      - completions
+    context_window: 4096
+    max_tokens: 4096
+
+  - id: "gemma-7b-it"
+    owned_by: "google"
+    created: 1706745600
+    capabilities:
+      - chat
+    context_window: 8192
+    max_tokens: 8192
