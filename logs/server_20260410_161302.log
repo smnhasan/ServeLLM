@@ -1,0 +1,10 @@
+INFO:     Started server process [568084]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+[LLM Serve] Starting up — version 1.0.0
+[LLM Serve] Dummy mode: True
+[LLM Serve] Rate limiting: True (60 RPM)
+[LLM Serve] Shutting down.

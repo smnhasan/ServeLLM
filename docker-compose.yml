@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: servellm-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./configs:/app/configs
+      - ./logs:/app/logs
+    environment:
+      - DEBUG=True
+    restart: unless-stopped
