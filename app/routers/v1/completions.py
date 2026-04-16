@@ -11,7 +11,7 @@ from app.schemas.openai import (
     CompletionChoice,
     UsageInfo,
 )
-from app.services.inference import dummy_engine
+from app.services.inference import get_engine
 from app.services.model_manager import model_manager
 from app.utils.helpers import estimate_tokens, normalize_stop
 
@@ -49,7 +49,8 @@ async def create_completion(
 
     for i, prompt in enumerate(prompts):
         for j in range(request.n):
-            text = await dummy_engine.complete(
+            engine = get_engine()
+            text = await engine.complete(
                 prompt=prompt, model=request.model,
                 temperature=request.temperature, top_p=request.top_p,
                 max_tokens=max_tokens, stop=stop,

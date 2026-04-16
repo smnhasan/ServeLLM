@@ -186,3 +186,16 @@ class DummyInferenceEngine(LLMEngine):
 
 # Singleton engine instance
 dummy_engine = DummyInferenceEngine()
+
+_local_engine: Optional[LLMEngine] = None
+
+def get_engine() -> LLMEngine:
+    if settings.DUMMY_MODE:
+        return dummy_engine
+    if _local_engine is None:
+        raise RuntimeError("Local engine not initialized. Ensure startup hook ran.")
+    return _local_engine
+
+def set_local_engine(engine: LLMEngine):
+    global _local_engine
+    _local_engine = engine

@@ -20,9 +20,17 @@ async def lifespan(app: FastAPI):
     print(f"[LLM Serve] Starting up — version {settings.APP_VERSION}")
     print(f"[LLM Serve] Dummy mode: {settings.DUMMY_MODE}")
     print(f"[LLM Serve] Rate limiting: {settings.RATE_LIMIT_ENABLED} ({settings.RATE_LIMIT_RPM} RPM)")
+    
+    if not settings.DUMMY_MODE:
+        from app.services.inference import set_local_engine
+        from app.services.local_engine import LocalInferenceEngine
+        print("[LLM Serve] Initializing local inference engine (downloading models if necessary)...")
+        engine = LocalInferenceEngine()
+        set_local_engine(engine)
+        print("[LLM Serve] Local inference engine ready.")
+        
     yield
     print("[LLM Serve] Shutting down.")
-
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
