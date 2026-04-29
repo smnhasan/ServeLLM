@@ -8,74 +8,33 @@ from app.schemas.openai import ModelCard, ModelPermission
 
 
 # ─── Default built-in models ──────────────────────────────────────────────────
-
 DEFAULT_MODELS = [
     {
-        "id": "gpt-3.5-turbo",
+        "id": "gpt-oss-20b",
+        "object": "model",
         "owned_by": "llm-serve",
-        "created": 1677610602,
+        "created": 1730000000,
         "capabilities": ["chat", "completions"],
-        "context_window": 4096,
+        "context_window": 10048,      # Adjust based on your actual model
         "max_tokens": 4096,
     },
     {
-        "id": "gpt-3.5-turbo-16k",
+        "id": "intfloat/multilingual-e5-large",
+        "object": "model",
         "owned_by": "llm-serve",
-        "created": 1685474247,
-        "capabilities": ["chat", "completions"],
-        "context_window": 16384,
-        "max_tokens": 16384,
-    },
-    {
-        "id": "gpt-4",
-        "owned_by": "llm-serve",
-        "created": 1687882411,
-        "capabilities": ["chat"],
-        "context_window": 8192,
-        "max_tokens": 8192,
-    },
-    {
-        "id": "gpt-4-turbo",
-        "owned_by": "llm-serve",
-        "created": 1706037777,
-        "capabilities": ["chat"],
-        "context_window": 128000,
-        "max_tokens": 4096,
-    },
-    {
-        "id": "text-davinci-003",
-        "owned_by": "llm-serve",
-        "created": 1669599635,
-        "capabilities": ["completions"],
-        "context_window": 4097,
-        "max_tokens": 4097,
-    },
-    {
-        "id": "text-embedding-ada-002",
-        "owned_by": "llm-serve",
-        "created": 1671217299,
+        "created": 1700000000,
         "capabilities": ["embeddings"],
-        "context_window": 8191,
-        "max_tokens": 8191,
+        "context_window": 512,
     },
     {
-        "id": "text-embedding-3-small",
+        "id": "hkunlp/instructor-large",
+        "object": "model",
         "owned_by": "llm-serve",
-        "created": 1705948997,
+        "created": 1700000001,
         "capabilities": ["embeddings"],
-        "context_window": 8191,
-        "max_tokens": 8191,
-    },
-    {
-        "id": "text-embedding-3-large",
-        "owned_by": "llm-serve",
-        "created": 1705953180,
-        "capabilities": ["embeddings"],
-        "context_window": 8191,
-        "max_tokens": 8191,
-    },
+        "context_window": 768,
+    }
 ]
-
 
 class ModelManager:
     def __init__(self):
