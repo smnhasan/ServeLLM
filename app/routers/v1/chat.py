@@ -14,7 +14,7 @@ from app.schemas.openai import (
     MessageRole,
     UsageInfo,
 )
-from app.services.inference import dummy_engine
+from app.services.inference import get_engine
 from app.services.model_manager import model_manager
 from app.utils.helpers import estimate_tokens, normalize_stop, stream_chat_response
 
@@ -44,7 +44,8 @@ async def create_chat_completion(
         return JSONResponse(status_code=400, content={"error": {"message": f"max_tokens ({max_tokens}) exceeds model maximum ({model_max}).", "type": "invalid_request_error", "param": "max_tokens", "code": "max_tokens_exceeded"}})
 
     if request.stream:
-        token_gen = dummy_engine.stream_chat(
+        engine = get_engine()
+        token_gen = engine.stream_chat(
             messages=request.messages, model=request.model,
             temperature=request.temperature, top_p=request.top_p,
             max_tokens=max_tokens, stop=stop,
@@ -55,7 +56,8 @@ async def create_chat_completion(
     total_completion_tokens = 0
 
     for i in range(request.n):
-        content = await dummy_engine.chat(
+        engine = get_engine()
+        content = await engine.chat(
             messages=request.messages, model=request.model,
             temperature=request.temperature, top_p=request.top_p,
             max_tokens=max_tokens, stop=stop,

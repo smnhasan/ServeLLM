@@ -28,9 +28,20 @@ class Settings(BaseSettings):
     MODELS_CONFIG_PATH: str = "configs/models.yaml"
     DEFAULT_MODEL: str = "gpt-3.5-turbo"
 
-    # Inference (dummy)
-    DUMMY_MODE: bool = True  # Use dummy responses
+    # Inference
+    DUMMY_MODE: bool = False  # Set to True to use DummyInferenceEngine
     DUMMY_LATENCY_MS: int = 200  # Simulated latency
+
+    # Local Inference Settings
+    LLM_MODEL_REPO: str = "ggml-org/gpt-oss-20b-GGUF"
+    LLM_MODEL_FILE: str = "gpt-oss-20b-mxfp4.gguf"
+    LLM_MODEL_ID: str = "gpt-oss-20b"
+    LLM_N_CTX: int = 10048
+    LLM_N_GPU_LAYERS: int = -1
+    MAX_CONCURRENT_REQUESTS: int = 3
+
+    EMBEDDING_MODEL_E5_ID: str = "intfloat/multilingual-e5-large"
+    EMBEDDING_MODEL_INSTRUCTOR_ID: str = "hkunlp/instructor-large"
 
     # Streaming
     STREAM_CHUNK_DELAY_MS: int = 50

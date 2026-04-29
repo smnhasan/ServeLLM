@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.dependencies import get_current_api_key
 from app.schemas.openai import EmbeddingData, EmbeddingRequest, EmbeddingResponse, UsageInfo
-from app.services.inference import dummy_engine
+from app.services.inference import get_engine
 from app.services.model_manager import model_manager
 from app.utils.helpers import estimate_tokens
 
@@ -34,7 +34,8 @@ async def create_embeddings(
     else:
         texts = [str(request.input)]
 
-    embeddings = await dummy_engine.embed(texts=texts, model=request.model)
+    engine = get_engine()
+    embeddings = await engine.embed(texts=texts, model=request.model)
     total_tokens = sum(estimate_tokens(t) for t in texts)
 
     return EmbeddingResponse(
