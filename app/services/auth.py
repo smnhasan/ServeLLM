@@ -1,10 +1,9 @@
+import hmac
 import time
 from collections import defaultdict, deque
-from typing import Optional, Tuple
 
 from app.core.config import settings
-from app.core.security import extract_bearer_token, get_valid_keys, verify_api_key, hash_api_key
-
+from app.core.security import extract_bearer_token, get_valid_keys, hash_api_key
 
 # ─── Simple in-memory rate limiter (sliding window) ──────────────────────────
 
@@ -15,7 +14,7 @@ class RateLimiter:
         self.rpm = rpm
         self._windows: dict[str, deque] = defaultdict(deque)
 
-    def is_allowed(self, key: str) -> Tuple[bool, int]:
+    def is_allowed(self, key: str) -> tuple[bool, int]:
         """
         Returns (allowed, retry_after_seconds).
         """
@@ -59,7 +58,7 @@ class AuthService:
         """Reload keys from config (useful for hot-reload in production)."""
         self._valid_keys = get_valid_keys()
 
-    def verify_key(self, authorization: Optional[str]) -> Tuple[bool, Optional[str], Optional[str]]:
+    def verify_key(self, authorization: str | None) -> tuple[bool, str | None, str | None]:
         """
         Verify the API key from the Authorization header.
 
@@ -80,13 +79,14 @@ class AuthService:
                 if hmac.compare_digest(token_hash, stored_key):
                     return True, token, None
         else:
-            # Plain comparison (dev/demo mode)
-            if token in self._valid_keys:
-                return True, token, None
+            # Plain constant-time comparison (dev/demo mode)
+            for stored_key in self._valid_keys:
+                if hmac.compare_digest(token.encode(), stored_key.encode()):
+                    return True, token, None
 
         return False, None, "Invalid API key. Check your credentials."
 
-    def check_rate_limit(self, api_key: str) -> Tuple[bool, int]:
+    def check_rate_limit(self, api_key: str) -> tuple[bool, int]:
         """
         Check rate limit for the given key.
 

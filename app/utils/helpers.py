@@ -1,7 +1,6 @@
-import json
 import time
 import uuid
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
 from fastapi.responses import StreamingResponse
 
@@ -17,8 +16,8 @@ from app.schemas.openai import (
 def openai_error(
     message: str,
     error_type: str = "invalid_request_error",
-    param: Optional[str] = None,
-    code: Optional[str] = None,
+    param: str | None = None,
+    code: str | None = None,
     status_code: int = 400,
 ) -> tuple[ErrorResponse, int]:
     """Create an OpenAI-compatible error response."""
@@ -31,7 +30,7 @@ def openai_error(
 async def stream_chat_response(
     token_generator: AsyncGenerator[str, None],
     model: str,
-    completion_id: Optional[str] = None,
+    completion_id: str | None = None,
 ) -> StreamingResponse:
     """Wrap a token generator in an SSE StreamingResponse."""
     cid = completion_id or f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -101,7 +100,7 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def normalize_stop(stop) -> Optional[list]:
+def normalize_stop(stop) -> list | None:
     if stop is None:
         return None
     if isinstance(stop, str):

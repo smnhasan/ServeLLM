@@ -1,20 +1,17 @@
 import asyncio
-import base64
-import threading
-import uuid
-import time
 import logging
-from typing import AsyncGenerator, List, Optional, Union, Any, Dict
+import threading
+from collections.abc import AsyncGenerator
+
 import numpy as np
-
-from llama_cpp import Llama
 from huggingface_hub import hf_hub_download
-from sentence_transformers import SentenceTransformer
 from InstructorEmbedding import INSTRUCTOR
+from llama_cpp import Llama
+from sentence_transformers import SentenceTransformer
 
-from app.services.llm_engine import LLMEngine
-from app.schemas.openai import ChatMessage
 from app.core.config import settings
+from app.schemas.openai import ChatMessage
+from app.services.llm_engine import LLMEngine
 
 logger = logging.getLogger(__name__)
 
@@ -54,21 +51,25 @@ class LocalInferenceEngine(LLMEngine):
         self.embed_e5_lock = threading.Lock()
         self.embed_ins_lock = threading.Lock()
 
-    def _messages_to_prompt(self, messages: List[ChatMessage]) -> str:
+    def _messages_to_prompt(self, messages: list[ChatMessage]) -> str:
+        """Render messages in the gpt-oss "harmony" chat format."""
         parts = []
         for msg in messages:
             role = msg.role.value if hasattr(msg.role, 'value') else msg.role
+            content = msg.content or ''
             if role == 'system':
-                parts.append(f'<|system|>\\n{msg.content}')
+                # Harmony reserves "system" for model metadata; user-supplied
+                # system prompts go in the developer message.
+                parts.append(f'<|start|>developer<|message|># Instructions\n\n{content}<|end|>')
             elif role == 'user':
-                parts.append(f'<|user|>\\n{msg.content}<|end|>')
+                parts.append(f'<|start|>user<|message|>{content}<|end|>')
             elif role == 'assistant':
-                parts.append(f'<|start|>assistant<|channel|>final<|message|>\\n{msg.content}<|end|>')
-        parts.append('<|start|>assistant<|channel|>final<|message|>\\n')
-        return '\\n'.join(parts)
+                parts.append(f'<|start|>assistant<|channel|>final<|message|>{content}<|end|>')
+        parts.append('<|start|>assistant<|channel|>final<|message|>')
+        return ''.join(parts)
 
-    def _stop_sequences(self, stop: Optional[Union[str, List[str]]]) -> List[str]:
-        defaults = ['<|end|>', '<|user|>']
+    def _stop_sequences(self, stop: str | list[str] | None) -> list[str]:
+        defaults = ['<|end|>', '<|return|>', '<|start|>']
         if stop is None:
             return defaults
         if isinstance(stop, str):
@@ -77,12 +78,12 @@ class LocalInferenceEngine(LLMEngine):
 
     async def chat(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         model: str,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        max_tokens: Optional[int] = None,
-        stop: Optional[List[str]] = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> str:
         async with self.semaphore:
@@ -99,12 +100,12 @@ class LocalInferenceEngine(LLMEngine):
 
     async def stream_chat(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         model: str,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        max_tokens: Optional[int] = None,
-        stop: Optional[List[str]] = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         async with self.semaphore:
@@ -116,14 +117,17 @@ class LocalInferenceEngine(LLMEngine):
                     for output in self.llm(prompt, max_tokens=max_tokens, temperature=temperature, top_p=top_p, stop=stops, stream=True):
                         yield output['choices'][0]['text']
                         
-            loop = asyncio.get_event_loop()
             iterator = _gen_llm()
-            while True:
-                try:
-                    token = await loop.run_in_executor(None, next, iterator)
+            sentinel = object()
+            try:
+                while True:
+                    token = await asyncio.to_thread(next, iterator, sentinel)
+                    if token is sentinel:
+                        break
                     yield token
-                except StopIteration:
-                    break
+            finally:
+                # Release llm_lock if the client disconnects mid-stream.
+                await asyncio.to_thread(iterator.close)
 
     async def complete(
         self,
@@ -132,7 +136,7 @@ class LocalInferenceEngine(LLMEngine):
         temperature: float = 1.0,
         top_p: float = 1.0,
         max_tokens: int = 16,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> str:
         async with self.semaphore:
@@ -147,10 +151,10 @@ class LocalInferenceEngine(LLMEngine):
 
     async def embed(
         self,
-        texts: List[str],
+        texts: list[str],
         model: str,
         **kwargs,
-    ) -> List[List[float]]:
+    ) -> list[list[float]]:
         async with self.semaphore:
             used_model = model
             if settings.EMBEDDING_MODEL_INSTRUCTOR_ID in used_model or "instructor" in used_model.lower():
@@ -167,7 +171,7 @@ class LocalInferenceEngine(LLMEngine):
                 data_list.append(vec.tolist())
             return data_list
 
-    def _embed_e5(self, texts: List[str]) -> np.ndarray:
+    def _embed_e5(self, texts: list[str]) -> np.ndarray:
         with self.embed_e5_lock:
             return self.embedder_e5.encode(
                 texts,
@@ -176,7 +180,7 @@ class LocalInferenceEngine(LLMEngine):
                 batch_size=64,
             )
 
-    def _embed_instructor(self, texts: List[str], instruction: Optional[str] = None) -> np.ndarray:
+    def _embed_instructor(self, texts: list[str], instruction: str | None = None) -> np.ndarray:
         instr = instruction or 'Represent the sentence: '
         pairs = [[instr, t] for t in texts]
         with self.embed_ins_lock:

@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
-from pydantic import BaseModel, Field
 import time
 import uuid
+from enum import StrEnum
+from typing import Any, Literal
 
+from pydantic import BaseModel, Field
 
 # ─── Shared ──────────────────────────────────────────────────────────────────
 
 class ErrorDetail(BaseModel):
     message: str
     type: str
-    param: Optional[str] = None
-    code: Optional[str] = None
+    param: str | None = None
+    code: str | None = None
 
 
 class ErrorResponse(BaseModel):
@@ -33,7 +33,7 @@ class ModelPermission(BaseModel):
     allow_view: bool = True
     allow_fine_tuning: bool = False
     organization: str = "*"
-    group: Optional[str] = None
+    group: str | None = None
     is_blocking: bool = False
 
 
@@ -42,19 +42,19 @@ class ModelCard(BaseModel):
     object: str = "model"
     created: int
     owned_by: str
-    permission: List[ModelPermission] = Field(default_factory=list)
-    root: Optional[str] = None
-    parent: Optional[str] = None
+    permission: list[ModelPermission] = Field(default_factory=list)
+    root: str | None = None
+    parent: str | None = None
 
 
 class ModelList(BaseModel):
     object: str = "list"
-    data: List[ModelCard]
+    data: list[ModelCard]
 
 
 # ─── Chat Completions ─────────────────────────────────────────────────────────
 
-class MessageRole(str, Enum):
+class MessageRole(StrEnum):
     system = "system"
     user = "user"
     assistant = "assistant"
@@ -64,16 +64,16 @@ class MessageRole(str, Enum):
 
 class ChatMessage(BaseModel):
     role: MessageRole
-    content: Optional[str] = None
-    name: Optional[str] = None
-    tool_calls: Optional[List[Dict[str, Any]]] = None
-    tool_call_id: Optional[str] = None
+    content: str | None = None
+    name: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
 
 
 class FunctionDefinition(BaseModel):
     name: str
-    description: Optional[str] = None
-    parameters: Optional[Dict[str, Any]] = None
+    description: str | None = None
+    parameters: dict[str, Any] | None = None
 
 
 class ToolDefinition(BaseModel):
@@ -87,21 +87,21 @@ class ResponseFormat(BaseModel):
 
 class ChatCompletionRequest(BaseModel):
     model: str
-    messages: List[ChatMessage]
-    temperature: Optional[float] = Field(default=1.0, ge=0.0, le=2.0)
-    top_p: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
-    n: Optional[int] = Field(default=1, ge=1, le=10)
-    stream: Optional[bool] = False
-    stop: Optional[Union[str, List[str]]] = None
-    max_tokens: Optional[int] = Field(default=None, ge=1)
-    presence_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
-    frequency_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
-    logit_bias: Optional[Dict[str, float]] = None
-    user: Optional[str] = None
-    tools: Optional[List[ToolDefinition]] = None
-    tool_choice: Optional[Union[str, Dict[str, Any]]] = None
-    response_format: Optional[ResponseFormat] = None
-    seed: Optional[int] = None
+    messages: list[ChatMessage]
+    temperature: float | None = Field(default=1.0, ge=0.0, le=2.0)
+    top_p: float | None = Field(default=1.0, ge=0.0, le=1.0)
+    n: int | None = Field(default=1, ge=1, le=10)
+    stream: bool | None = False
+    stop: str | list[str] | None = None
+    max_tokens: int | None = Field(default=None, ge=1)
+    presence_penalty: float | None = Field(default=0.0, ge=-2.0, le=2.0)
+    frequency_penalty: float | None = Field(default=0.0, ge=-2.0, le=2.0)
+    logit_bias: dict[str, float] | None = None
+    user: str | None = None
+    tools: list[ToolDefinition] | None = None
+    tool_choice: str | dict[str, Any] | None = None
+    response_format: ResponseFormat | None = None
+    seed: int | None = None
 
 
 class UsageInfo(BaseModel):
@@ -113,8 +113,8 @@ class UsageInfo(BaseModel):
 class ChatChoice(BaseModel):
     index: int
     message: ChatMessage
-    finish_reason: Optional[Literal["stop", "length", "tool_calls", "content_filter", "function_call"]] = "stop"
-    logprobs: Optional[Any] = None
+    finish_reason: Literal["stop", "length", "tool_calls", "content_filter", "function_call"] | None = "stop"
+    logprobs: Any | None = None
 
 
 class ChatCompletionResponse(BaseModel):
@@ -122,24 +122,24 @@ class ChatCompletionResponse(BaseModel):
     object: str = "chat.completion"
     created: int = Field(default_factory=lambda: int(time.time()))
     model: str
-    choices: List[ChatChoice]
+    choices: list[ChatChoice]
     usage: UsageInfo
-    system_fingerprint: Optional[str] = None
+    system_fingerprint: str | None = None
 
 
 # ─── Streaming ────────────────────────────────────────────────────────────────
 
 class DeltaMessage(BaseModel):
-    role: Optional[MessageRole] = None
-    content: Optional[str] = None
-    tool_calls: Optional[List[Dict[str, Any]]] = None
+    role: MessageRole | None = None
+    content: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
 
 
 class ChatStreamChoice(BaseModel):
     index: int
     delta: DeltaMessage
-    finish_reason: Optional[str] = None
-    logprobs: Optional[Any] = None
+    finish_reason: str | None = None
+    logprobs: Any | None = None
 
 
 class ChatCompletionStreamResponse(BaseModel):
@@ -147,36 +147,36 @@ class ChatCompletionStreamResponse(BaseModel):
     object: str = "chat.completion.chunk"
     created: int
     model: str
-    choices: List[ChatStreamChoice]
-    system_fingerprint: Optional[str] = None
+    choices: list[ChatStreamChoice]
+    system_fingerprint: str | None = None
 
 
 # ─── Completions (legacy) ─────────────────────────────────────────────────────
 
 class CompletionRequest(BaseModel):
     model: str
-    prompt: Union[str, List[str], List[int], List[List[int]]]
-    suffix: Optional[str] = None
-    max_tokens: Optional[int] = Field(default=16, ge=1)
-    temperature: Optional[float] = Field(default=1.0, ge=0.0, le=2.0)
-    top_p: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
-    n: Optional[int] = Field(default=1, ge=1, le=10)
-    stream: Optional[bool] = False
-    logprobs: Optional[int] = Field(default=None, ge=0, le=5)
-    echo: Optional[bool] = False
-    stop: Optional[Union[str, List[str]]] = None
-    presence_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
-    frequency_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
-    best_of: Optional[int] = Field(default=1, ge=1)
-    logit_bias: Optional[Dict[str, float]] = None
-    user: Optional[str] = None
+    prompt: str | list[str] | list[int] | list[list[int]]
+    suffix: str | None = None
+    max_tokens: int | None = Field(default=16, ge=1)
+    temperature: float | None = Field(default=1.0, ge=0.0, le=2.0)
+    top_p: float | None = Field(default=1.0, ge=0.0, le=1.0)
+    n: int | None = Field(default=1, ge=1, le=10)
+    stream: bool | None = False
+    logprobs: int | None = Field(default=None, ge=0, le=5)
+    echo: bool | None = False
+    stop: str | list[str] | None = None
+    presence_penalty: float | None = Field(default=0.0, ge=-2.0, le=2.0)
+    frequency_penalty: float | None = Field(default=0.0, ge=-2.0, le=2.0)
+    best_of: int | None = Field(default=1, ge=1)
+    logit_bias: dict[str, float] | None = None
+    user: str | None = None
 
 
 class CompletionChoice(BaseModel):
     text: str
     index: int
-    logprobs: Optional[Any] = None
-    finish_reason: Optional[str] = "stop"
+    logprobs: Any | None = None
+    finish_reason: str | None = "stop"
 
 
 class CompletionResponse(BaseModel):
@@ -184,7 +184,7 @@ class CompletionResponse(BaseModel):
     object: str = "text_completion"
     created: int = Field(default_factory=lambda: int(time.time()))
     model: str
-    choices: List[CompletionChoice]
+    choices: list[CompletionChoice]
     usage: UsageInfo
 
 
@@ -192,20 +192,20 @@ class CompletionResponse(BaseModel):
 
 class EmbeddingRequest(BaseModel):
     model: str
-    input: Union[str, List[str], List[int], List[List[int]]]
-    encoding_format: Optional[Literal["float", "base64"]] = "float"
-    dimensions: Optional[int] = None
-    user: Optional[str] = None
+    input: str | list[str] | list[int] | list[list[int]]
+    encoding_format: Literal["float", "base64"] | None = "float"
+    dimensions: int | None = Field(default=None, ge=1)
+    user: str | None = None
 
 
 class EmbeddingData(BaseModel):
     object: str = "embedding"
-    embedding: List[float]
+    embedding: list[float]
     index: int
 
 
 class EmbeddingResponse(BaseModel):
     object: str = "list"
-    data: List[EmbeddingData]
+    data: list[EmbeddingData]
     model: str
     usage: UsageInfo

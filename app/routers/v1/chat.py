@@ -1,21 +1,20 @@
 import time
 import uuid
-from typing import List
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 
 from app.dependencies import get_current_api_key
 from app.schemas.openai import (
+    ChatChoice,
     ChatCompletionRequest,
     ChatCompletionResponse,
-    ChatChoice,
     ChatMessage,
     MessageRole,
     UsageInfo,
 )
 from app.services.inference import get_engine
 from app.services.model_manager import model_manager
+from app.utils.errors import error_response
 from app.utils.helpers import estimate_tokens, normalize_stop, stream_chat_response
 
 router = APIRouter()
@@ -31,19 +30,22 @@ async def create_chat_completion(
     api_key: str = Depends(get_current_api_key),
 ):
     if not model_manager.model_exists(request.model):
-        return JSONResponse(status_code=404, content={"error": {"message": f"The model '{request.model}' does not exist.", "type": "invalid_request_error", "param": "model", "code": "model_not_found"}})
+        return error_response(f"The model '{request.model}' does not exist.", param="model", code="model_not_found", status_code=404)
 
     if not model_manager.has_capability(request.model, "chat"):
-        return JSONResponse(status_code=400, content={"error": {"message": f"Model '{request.model}' does not support chat completions.", "type": "invalid_request_error", "param": "model", "code": "model_not_supported"}})
+        return error_response(f"Model '{request.model}' does not support chat completions.", param="model", code="model_not_supported")
 
     stop = normalize_stop(request.stop)
     model_max = model_manager.get_max_tokens(request.model)
     max_tokens = request.max_tokens or min(1024, model_max)
+    n = request.n or 1
 
     if max_tokens > model_max:
-        return JSONResponse(status_code=400, content={"error": {"message": f"max_tokens ({max_tokens}) exceeds model maximum ({model_max}).", "type": "invalid_request_error", "param": "max_tokens", "code": "max_tokens_exceeded"}})
+        return error_response(f"max_tokens ({max_tokens}) exceeds model maximum ({model_max}).", param="max_tokens", code="max_tokens_exceeded")
 
     if request.stream:
+        if n > 1:
+            return error_response("n > 1 is not supported with stream=true.", param="n", code="invalid_request")
         engine = get_engine()
         token_gen = engine.stream_chat(
             messages=request.messages, model=request.model,
@@ -52,10 +54,10 @@ async def create_chat_completion(
         )
         return await stream_chat_response(token_gen, model=request.model)
 
-    choices: List[ChatChoice] = []
+    choices: list[ChatChoice] = []
     total_completion_tokens = 0
 
-    for i in range(request.n):
+    for i in range(n):
         engine = get_engine()
         content = await engine.chat(
             messages=request.messages, model=request.model,

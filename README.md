@@ -12,7 +12,7 @@ An **OpenAI-compatible LLM serving API** built with FastAPI. Drop-in replacement
 | **Rate limiting** | Per-key sliding-window (configurable RPM) |
 | **Chat completions** | `POST /v1/chat/completions` — streaming + non-streaming |
 | **Text completions** | `POST /v1/completions` — legacy endpoint |
-| **Embeddings** | `POST /v1/embeddings` — deterministic dummy vectors |
+| **Embeddings** | `POST /v1/embeddings` — multilingual-e5-large / instructor-large |
 | **Model registry** | `GET /v1/models`, `GET /v1/models/{id}` — YAML-configurable |
 | **OpenAI schema** | Pydantic models matching the OpenAI API spec exactly |
 | **Dummy mode** | Fully functional without a real model — swap in vLLM/HF/Ollama later |
@@ -56,7 +56,7 @@ curl http://localhost:8000/v1/chat/completions \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-3.5-turbo",
+    "model": "gpt-oss-20b",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
@@ -64,13 +64,13 @@ curl http://localhost:8000/v1/chat/completions \
 curl http://localhost:8000/v1/chat/completions \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model": "gpt-3.5-turbo", "messages": [{"role":"user","content":"Hi"}], "stream": true}'
+  -d '{"model": "gpt-oss-20b", "messages": [{"role":"user","content":"Hi"}], "stream": true}'
 
 # Embeddings
 curl http://localhost:8000/v1/embeddings \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model": "text-embedding-ada-002", "input": "Hello world"}'
+  -d '{"model": "intfloat/multilingual-e5-large", "input": "Hello world"}'
 ```
 
 ### With the OpenAI Python SDK
@@ -85,14 +85,14 @@ client = OpenAI(
 
 # Chat
 response = client.chat.completions.create(
-    model="gpt-3.5-turbo",
+    model="gpt-oss-20b",
     messages=[{"role": "user", "content": "What is FastAPI?"}],
 )
 print(response.choices[0].message.content)
 
 # Streaming
 stream = client.chat.completions.create(
-    model="gpt-4",
+    model="gpt-oss-20b",
     messages=[{"role": "user", "content": "Tell me a joke"}],
     stream=True,
 )
@@ -101,10 +101,10 @@ for chunk in stream:
 
 # Embeddings
 emb = client.embeddings.create(
-    model="text-embedding-ada-002",
+    model="intfloat/multilingual-e5-large",
     input="The quick brown fox",
 )
-print(len(emb.data[0].embedding))  # 1536
+print(len(emb.data[0].embedding))  # 1024
 ```
 
 ---
@@ -115,10 +115,10 @@ All settings live in `.env` (see `.env.example`):
 
 | Variable | Default | Description |
 |---|---|---|
-| `VALID_API_KEYS` | `sk-llmserve-test-key-1234,...` | Comma-separated valid API keys |
+| `VALID_API_KEYS` | `sk-llmserve-test-key-1234` | Comma-separated valid API keys |
 | `RATE_LIMIT_ENABLED` | `true` | Enable per-key rate limiting |
 | `RATE_LIMIT_RPM` | `60` | Requests per minute per key |
-| `DUMMY_MODE` | `true` | Use dummy responses (no real model) |
+| `DUMMY_MODE` | `false` | Use dummy responses instead of loading local models |
 | `DUMMY_LATENCY_MS` | `200` | Simulated inference latency |
 | `STREAM_CHUNK_DELAY_MS` | `50` | Delay between streamed tokens |
 | `MODELS_CONFIG_PATH` | `configs/models.yaml` | Path to custom model registry |
@@ -142,7 +142,8 @@ models:
 ## Running Tests
 
 ```bash
-pytest -v
+pip install -r requirements-dev.txt
+pytest -v   # tests force DUMMY_MODE, no models are downloaded
 ```
 
 ---
@@ -151,7 +152,7 @@ pytest -v
 
 1. Open `app/services/inference.py`
 2. Create a new class implementing `LLMEngine` (defined in `app/services/llm_engine.py`)
-3. Replace `dummy_engine` with your implementation in the routers
+3. Register it at startup with `set_local_engine()` in `app/main.py` (routers call `get_engine()`)
 
 Example backends to implement:
 - **vLLM**: `AsyncLLMEngine` via `vllm.engine.async_llm_engine`
@@ -176,13 +177,14 @@ llm-serve/
 │   ├── schemas/openai.py    # Pydantic models (OpenAI-spec)
 │   ├── services/
 │   │   ├── llm_engine.py    # Abstract LLM interface
-│   │   ├── inference.py     # DummyInferenceEngine (swap for real)
+│   │   ├── inference.py     # DummyInferenceEngine + get_engine()
+│   │   ├── local_engine.py  # llama.cpp + sentence-transformers engine
 │   │   ├── model_manager.py # Model registry
 │   │   └── auth.py          # Auth + rate limiter
 │   ├── core/
 │   │   ├── config.py        # pydantic-settings
 │   │   └── security.py      # Key hashing helpers
-│   └── utils/helpers.py     # Streaming, token counting, errors
+│   └── utils/               # Streaming, token counting, error responses
 ├── configs/models.yaml      # Custom model registry
 ├── tests/                   # pytest test suite
 └── .env.example

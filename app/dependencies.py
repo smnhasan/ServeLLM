@@ -1,4 +1,4 @@
-from typing import Optional
+
 from fastapi import Header, Request, status
 from fastapi.responses import JSONResponse
 
@@ -27,7 +27,7 @@ class APIError(Exception):
 
 async def get_current_api_key(
     request: Request,
-    authorization: Optional[str] = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> str:
     is_valid, api_key, error_msg = auth_service.verify_key(authorization)
 

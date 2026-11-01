@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, List, Optional
+from collections.abc import AsyncGenerator
+
 from app.schemas.openai import ChatMessage
 
 
@@ -9,12 +10,12 @@ class LLMEngine(ABC):
     @abstractmethod
     async def chat(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         model: str,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        max_tokens: Optional[int] = None,
-        stop: Optional[List[str]] = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> str:
         """Generate a chat completion and return the full response text."""
@@ -23,12 +24,12 @@ class LLMEngine(ABC):
     @abstractmethod
     async def stream_chat(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         model: str,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        max_tokens: Optional[int] = None,
-        stop: Optional[List[str]] = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         """Stream chat completion tokens one by one."""
@@ -42,7 +43,7 @@ class LLMEngine(ABC):
         temperature: float = 1.0,
         top_p: float = 1.0,
         max_tokens: int = 16,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> str:
         """Legacy text completion."""
@@ -51,10 +52,10 @@ class LLMEngine(ABC):
     @abstractmethod
     async def embed(
         self,
-        texts: List[str],
+        texts: list[str],
         model: str,
         **kwargs,
-    ) -> List[List[float]]:
+    ) -> list[list[float]]:
         """Generate embeddings for a list of texts."""
         ...
 
