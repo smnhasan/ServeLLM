@@ -1,20 +1,18 @@
-from pydantic_settings import BaseSettings
-from typing import List, Optional
-import secrets
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
+
     # App
     APP_NAME: str = "LLM Serve"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # API
     API_V1_PREFIX: str = "/v1"
 
     # Security
-    SECRET_KEY: str = secrets.token_urlsafe(32)
-    API_KEY_HEADER: str = "Authorization"
     # Comma-separated list of valid API keys (hashed or plain depending on AUTH_USE_HASHED)
     # For demo: plain keys. In production, store hashed.
     VALID_API_KEYS: str = "sk-llmserve-test-key-1234"
@@ -26,7 +24,7 @@ class Settings(BaseSettings):
 
     # Models
     MODELS_CONFIG_PATH: str = "configs/models.yaml"
-    DEFAULT_MODEL: str = "gpt-3.5-turbo"
+    DEFAULT_MODEL: str = "gpt-oss-20b"
 
     # Inference
     DUMMY_MODE: bool = False  # Set to True to use DummyInferenceEngine
@@ -45,10 +43,6 @@ class Settings(BaseSettings):
 
     # Streaming
     STREAM_CHUNK_DELAY_MS: int = 50
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 settings = Settings()

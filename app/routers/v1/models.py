@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 
 from app.dependencies import get_current_api_key
 from app.schemas.openai import ModelCard, ModelList
 from app.services.model_manager import model_manager
+from app.utils.errors import error_response
 
 router = APIRouter()
 
@@ -17,5 +17,5 @@ async def list_models(api_key: str = Depends(get_current_api_key)):
 async def retrieve_model(model_id: str, api_key: str = Depends(get_current_api_key)):
     model = model_manager.get_model(model_id)
     if model is None:
-        return JSONResponse(status_code=404, content={"error": {"message": f"The model '{model_id}' does not exist.", "type": "invalid_request_error", "param": None, "code": "model_not_found"}})
+        return error_response(f"The model '{model_id}' does not exist.", code="model_not_found", status_code=404)
     return model

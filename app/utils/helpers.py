@@ -1,7 +1,7 @@
-import json
+import logging
 import time
 import uuid
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
 from fastapi.responses import StreamingResponse
 
@@ -13,12 +13,14 @@ from app.schemas.openai import (
     ErrorResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def openai_error(
     message: str,
     error_type: str = "invalid_request_error",
-    param: Optional[str] = None,
-    code: Optional[str] = None,
+    param: str | None = None,
+    code: str | None = None,
     status_code: int = 400,
 ) -> tuple[ErrorResponse, int]:
     """Create an OpenAI-compatible error response."""
@@ -31,7 +33,7 @@ def openai_error(
 async def stream_chat_response(
     token_generator: AsyncGenerator[str, None],
     model: str,
-    completion_id: Optional[str] = None,
+    completion_id: str | None = None,
 ) -> StreamingResponse:
     """Wrap a token generator in an SSE StreamingResponse."""
     cid = completion_id or f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -54,20 +56,34 @@ async def stream_chat_response(
         yield f"data: {first_chunk.model_dump_json()}\n\n"
 
         # Content chunks
-        async for token in token_generator:
-            chunk = ChatCompletionStreamResponse(
-                id=cid,
-                created=created,
-                model=model,
-                choices=[
-                    ChatStreamChoice(
-                        index=0,
-                        delta=DeltaMessage(content=token),
-                        finish_reason=None,
-                    )
-                ],
-            )
-            yield f"data: {chunk.model_dump_json()}\n\n"
+        try:
+            async for token in token_generator:
+                chunk = ChatCompletionStreamResponse(
+                    id=cid,
+                    created=created,
+                    model=model,
+                    choices=[
+                        ChatStreamChoice(
+                            index=0,
+                            delta=DeltaMessage(content=token),
+                            finish_reason=None,
+                        )
+                    ],
+                )
+                yield f"data: {chunk.model_dump_json()}\n\n"
+        except Exception:
+            logger.exception("Engine failed mid-stream")
+            error = ErrorResponse(error=ErrorDetail(
+                message="The model failed while generating the response.",
+                type="server_error",
+                code="engine_error",
+            ))
+            yield f"data: {error.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        finally:
+            # Close the engine stream now (not at GC) so it can release its resources.
+            await token_generator.aclose()
 
         # Final chunk
         final_chunk = ChatCompletionStreamResponse(
@@ -101,7 +117,7 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def normalize_stop(stop) -> Optional[list]:
+def normalize_stop(stop) -> list | None:
     if stop is None:
         return None
     if isinstance(stop, str):

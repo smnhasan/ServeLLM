@@ -1,8 +1,6 @@
-import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import AUTH_HEADERS, INVALID_HEADERS
-
+from tests.conftest import AUTH_HEADERS
 
 # ─── System / Health ──────────────────────────────────────────────────────────
 
@@ -55,10 +53,10 @@ class TestModels:
         assert "created" in model
 
     def test_retrieve_existing_model(self, client: TestClient):
-        r = client.get("/v1/models/gpt-3.5-turbo", headers=AUTH_HEADERS)
+        r = client.get("/v1/models/gpt-oss-20b", headers=AUTH_HEADERS)
         assert r.status_code == 200
         body = r.json()
-        assert body["id"] == "gpt-3.5-turbo"
+        assert body["id"] == "gpt-oss-20b"
         assert body["object"] == "model"
 
     def test_retrieve_nonexistent_model(self, client: TestClient):
@@ -68,19 +66,19 @@ class TestModels:
         assert "error" in body
         assert body["error"]["code"] == "model_not_found"
 
-    def test_yaml_models_loaded(self, client: TestClient):
-        """Models from models.yaml should appear in the listing."""
+    def test_default_models_listed(self, client: TestClient):
         r = client.get("/v1/models", headers=AUTH_HEADERS)
         ids = [m["id"] for m in r.json()["data"]]
-        assert "llama-3-8b" in ids
-        assert "mistral-7b-instruct" in ids
+        assert "gpt-oss-20b" in ids
+        assert "intfloat/multilingual-e5-large" in ids
+        assert "hkunlp/instructor-large" in ids
 
 
 # ─── Chat Completions ─────────────────────────────────────────────────────────
 
 class TestChatCompletions:
     BASE_PAYLOAD = {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-oss-20b",
         "messages": [{"role": "user", "content": "Hello, world!"}],
     }
 
@@ -120,7 +118,7 @@ class TestChatCompletions:
 
     def test_system_message_supported(self, client: TestClient):
         payload = {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-oss-20b",
             "messages": [
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": "Hello!"},
@@ -136,7 +134,7 @@ class TestChatCompletions:
         assert r.json()["error"]["code"] == "model_not_found"
 
     def test_embedding_model_not_supported_for_chat(self, client: TestClient):
-        payload = {**self.BASE_PAYLOAD, "model": "text-embedding-ada-002"}
+        payload = {**self.BASE_PAYLOAD, "model": "intfloat/multilingual-e5-large"}
         r = client.post("/v1/chat/completions", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 400
         assert r.json()["error"]["code"] == "model_not_supported"
@@ -156,7 +154,7 @@ class TestChatCompletions:
         assert r.json()["error"]["code"] == "max_tokens_exceeded"
 
     def test_missing_messages_returns_422(self, client: TestClient):
-        payload = {"model": "gpt-3.5-turbo"}
+        payload = {"model": "gpt-oss-20b"}
         r = client.post("/v1/chat/completions", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 422
 
@@ -171,7 +169,7 @@ class TestChatCompletions:
 
     def test_model_echoed_in_response(self, client: TestClient):
         r = client.post("/v1/chat/completions", json=self.BASE_PAYLOAD, headers=AUTH_HEADERS)
-        assert r.json()["model"] == "gpt-3.5-turbo"
+        assert r.json()["model"] == "gpt-oss-20b"
 
     def test_streaming_returns_event_stream(self, client: TestClient):
         payload = {**self.BASE_PAYLOAD, "stream": True}
@@ -182,14 +180,46 @@ class TestChatCompletions:
     def test_streaming_content_structure(self, client: TestClient):
         payload = {**self.BASE_PAYLOAD, "stream": True}
         r = client.post("/v1/chat/completions", json=payload, headers=AUTH_HEADERS)
-        lines = [l for l in r.text.split("\n") if l.startswith("data:")]
+        lines = [line for line in r.text.split("\n") if line.startswith("data:")]
         assert len(lines) > 1
         # Last data line should be [DONE]
         assert lines[-1].strip() == "data: [DONE]"
 
+    def test_null_n_treated_as_one(self, client: TestClient):
+        for stream in (False, True):
+            payload = {**self.BASE_PAYLOAD, "n": None, "stream": stream}
+            r = client.post("/v1/chat/completions", json=payload, headers=AUTH_HEADERS)
+            assert r.status_code == 200
+
+    def test_stream_engine_error_sends_error_event(self, client: TestClient, monkeypatch):
+        from app.services.inference import dummy_engine
+
+        async def failing_stream(*args, **kwargs):
+            yield "partial "
+            raise RuntimeError("engine crashed")
+
+        monkeypatch.setattr(dummy_engine, "stream_chat", failing_stream)
+        payload = {**self.BASE_PAYLOAD, "stream": True}
+        r = client.post("/v1/chat/completions", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 200
+        lines = [line for line in r.text.split("\n") if line.startswith("data:")]
+        assert '"engine_error"' in lines[-2]
+        assert lines[-1].strip() == "data: [DONE]"
+
+    def test_engine_not_ready_returns_503(self, client: TestClient, monkeypatch):
+        from app.core.config import settings
+        from app.services import inference
+
+        monkeypatch.setattr(settings, "DUMMY_MODE", False)
+        monkeypatch.setattr(inference, "_local_engine", None)
+        r = client.post("/v1/chat/completions", json=self.BASE_PAYLOAD, headers=AUTH_HEADERS)
+        assert r.status_code == 503
+        assert r.json()["error"]["code"] == "engine_not_ready"
+        assert r.headers["retry-after"] == "10"
+
     def test_multi_turn_conversation(self, client: TestClient):
         payload = {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-oss-20b",
             "messages": [
                 {"role": "user", "content": "What is 2+2?"},
                 {"role": "assistant", "content": "4"},
@@ -204,7 +234,7 @@ class TestChatCompletions:
 
 class TestCompletions:
     BASE_PAYLOAD = {
-        "model": "text-davinci-003",
+        "model": "gpt-oss-20b",
         "prompt": "Once upon a time",
     }
 
@@ -250,12 +280,29 @@ class TestCompletions:
         r = client.post("/v1/completions", json=self.BASE_PAYLOAD)
         assert r.status_code == 401
 
+    def test_embedding_model_not_supported(self, client: TestClient):
+        payload = {**self.BASE_PAYLOAD, "model": "intfloat/multilingual-e5-large"}
+        r = client.post("/v1/completions", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 400
+        assert r.json()["error"]["code"] == "model_not_supported"
+
+    def test_null_n_and_max_tokens(self, client: TestClient):
+        payload = {**self.BASE_PAYLOAD, "n": None, "max_tokens": None}
+        r = client.post("/v1/completions", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 200
+        assert len(r.json()["choices"]) == 1
+
+    def test_stream_rejected(self, client: TestClient):
+        payload = {**self.BASE_PAYLOAD, "stream": True}
+        r = client.post("/v1/completions", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 400
+
 
 # ─── Embeddings ───────────────────────────────────────────────────────────────
 
 class TestEmbeddings:
     BASE_PAYLOAD = {
-        "model": "text-embedding-ada-002",
+        "model": "intfloat/multilingual-e5-large",
         "input": "The food was delicious and the waiter was very helpful.",
     }
 
@@ -268,7 +315,7 @@ class TestEmbeddings:
         assert body["data"][0]["object"] == "embedding"
         embedding = body["data"][0]["embedding"]
         assert isinstance(embedding, list)
-        assert len(embedding) == 1536  # ada-002 dimensions
+        assert len(embedding) == 1024  # multilingual-e5-large dimensions
 
     def test_multiple_inputs(self, client: TestClient):
         payload = {**self.BASE_PAYLOAD, "input": ["Hello", "World", "Test"]}
@@ -282,11 +329,28 @@ class TestEmbeddings:
         for i, d in enumerate(r.json()["data"]):
             assert d["index"] == i
 
-    def test_large_model_dimensions(self, client: TestClient):
-        payload = {"model": "text-embedding-3-large", "input": "test"}
+    def test_instructor_model_dimensions(self, client: TestClient):
+        payload = {"model": "hkunlp/instructor-large", "input": "test"}
         r = client.post("/v1/embeddings", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 200
-        assert len(r.json()["data"][0]["embedding"]) == 3072
+        assert len(r.json()["data"][0]["embedding"]) == 768
+
+    def test_dimensions_param_truncates(self, client: TestClient):
+        payload = {**self.BASE_PAYLOAD, "dimensions": 256}
+        r = client.post("/v1/embeddings", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 200
+        assert len(r.json()["data"][0]["embedding"]) == 256
+
+    def test_dimensions_above_native_size_rejected(self, client: TestClient):
+        payload = {**self.BASE_PAYLOAD, "dimensions": 4096}
+        r = client.post("/v1/embeddings", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 400
+        assert r.json()["error"]["param"] == "dimensions"
+
+    def test_token_id_input_rejected(self, client: TestClient):
+        payload = {**self.BASE_PAYLOAD, "input": [1, 2, 3]}
+        r = client.post("/v1/embeddings", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 400
 
     def test_deterministic_embeddings(self, client: TestClient):
         """Same input should produce same embedding vector."""
@@ -302,7 +366,7 @@ class TestEmbeddings:
         assert r1.json()["data"][0]["embedding"] != r2.json()["data"][0]["embedding"]
 
     def test_chat_model_not_supported_for_embeddings(self, client: TestClient):
-        payload = {**self.BASE_PAYLOAD, "model": "gpt-3.5-turbo"}
+        payload = {**self.BASE_PAYLOAD, "model": "gpt-oss-20b"}
         r = client.post("/v1/embeddings", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 400
         assert r.json()["error"]["code"] == "model_not_supported"

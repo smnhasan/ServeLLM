@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 
 from tests.conftest import AUTH_HEADERS, INVALID_HEADERS
@@ -81,3 +80,16 @@ class TestSecurity:
         assert isinstance(keys, list)
         assert len(keys) >= 1
         assert "sk-llmserve-test-key-1234" in keys
+
+
+class TestHashedKeys:
+    def test_hashed_key_mode(self, monkeypatch):
+        from app.core.config import settings
+        from app.core.security import hash_api_key
+        from app.services.auth import AuthService
+
+        monkeypatch.setattr(settings, "AUTH_USE_HASHED", True)
+        monkeypatch.setattr(settings, "VALID_API_KEYS", hash_api_key("sk-secret"))
+        service = AuthService()
+        assert service.verify_key("Bearer sk-secret")[0] is True
+        assert service.verify_key("Bearer sk-wrong")[0] is False

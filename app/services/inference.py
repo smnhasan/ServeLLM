@@ -1,13 +1,14 @@
 import asyncio
+import hashlib
 import math
 import random
-import hashlib
-from typing import AsyncGenerator, List, Optional
+from collections.abc import AsyncGenerator
 
-from app.services.llm_engine import LLMEngine
-from app.schemas.openai import ChatMessage
 from app.core.config import settings
-
+from app.schemas.openai import ChatMessage
+from app.services.llm_engine import LLMEngine
+from app.services.model_manager import model_manager
+from app.utils.errors import APIError
 
 # ─── Dummy response templates ─────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ KEYWORD_RESPONSES = {
 }
 
 
-def _pick_response(messages: List[ChatMessage]) -> str:
+def _pick_response(messages: list[ChatMessage]) -> str:
     """Pick a contextually aware dummy response based on the messages."""
     # Check system message
     for msg in messages:
@@ -75,7 +76,7 @@ def _count_tokens_simple(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def _generate_embedding(text: str, dimensions: int = 1536) -> List[float]:
+def _generate_embedding(text: str, dimensions: int = 1536) -> list[float]:
     """Generate a deterministic fake embedding vector based on text hash."""
     seed = int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**32)
     rng = random.Random(seed)
@@ -87,13 +88,6 @@ def _generate_embedding(text: str, dimensions: int = 1536) -> List[float]:
     return vec
 
 
-MODEL_EMBEDDING_DIMS = {
-    "text-embedding-ada-002": 1536,
-    "text-embedding-3-small": 1536,
-    "text-embedding-3-large": 3072,
-}
-
-
 class DummyInferenceEngine(LLMEngine):
     """
     A fully functional dummy inference engine that simulates LLM responses.
@@ -103,12 +97,12 @@ class DummyInferenceEngine(LLMEngine):
 
     async def chat(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         model: str,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        max_tokens: Optional[int] = None,
-        stop: Optional[List[str]] = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> str:
         await asyncio.sleep(settings.DUMMY_LATENCY_MS / 1000)
@@ -122,12 +116,12 @@ class DummyInferenceEngine(LLMEngine):
 
     async def stream_chat(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         model: str,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        max_tokens: Optional[int] = None,
-        stop: Optional[List[str]] = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         await asyncio.sleep(settings.DUMMY_LATENCY_MS / 1000)
@@ -151,7 +145,7 @@ class DummyInferenceEngine(LLMEngine):
         temperature: float = 1.0,
         top_p: float = 1.0,
         max_tokens: int = 16,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
         **kwargs,
     ) -> str:
         await asyncio.sleep(settings.DUMMY_LATENCY_MS / 1000)
@@ -172,12 +166,14 @@ class DummyInferenceEngine(LLMEngine):
 
     async def embed(
         self,
-        texts: List[str],
+        texts: list[str],
         model: str,
         **kwargs,
-    ) -> List[List[float]]:
+    ) -> list[list[float]]:
         await asyncio.sleep(settings.DUMMY_LATENCY_MS / 1000)
-        dims = MODEL_EMBEDDING_DIMS.get(model, 1536)
+        dims = model_manager.get_embedding_dims(model) or 1024
+        if kwargs.get("dimensions"):
+            dims = min(dims, kwargs["dimensions"])
         return [_generate_embedding(text, dims) for text in texts]
 
     def count_tokens(self, text: str, model: str) -> int:
@@ -187,13 +183,19 @@ class DummyInferenceEngine(LLMEngine):
 # Singleton engine instance
 dummy_engine = DummyInferenceEngine()
 
-_local_engine: Optional[LLMEngine] = None
+_local_engine: LLMEngine | None = None
 
 def get_engine() -> LLMEngine:
     if settings.DUMMY_MODE:
         return dummy_engine
     if _local_engine is None:
-        raise RuntimeError("Local engine not initialized. Ensure startup hook ran.")
+        raise APIError(
+            message="The model engine is still loading. Try again shortly.",
+            error_type="server_error",
+            code="engine_not_ready",
+            status_code=503,
+            headers={"Retry-After": "10"},
+        )
     return _local_engine
 
 def set_local_engine(engine: LLMEngine):

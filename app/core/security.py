@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import secrets
-from typing import Optional
+
 from app.core.config import settings
 
 
@@ -21,7 +21,7 @@ def generate_api_key(prefix: str = "sk-llmserve") -> str:
     return f"{prefix}-{token}"
 
 
-def extract_bearer_token(authorization: str) -> Optional[str]:
+def extract_bearer_token(authorization: str) -> str | None:
     """Extract the token from a 'Bearer <token>' header value."""
     if not authorization:
         return None

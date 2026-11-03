@@ -1,10 +1,13 @@
+import logging
 import time
-import yaml
 from pathlib import Path
-from typing import Dict, List, Optional
+
+import yaml
 
 from app.core.config import settings
 from app.schemas.openai import ModelCard, ModelPermission
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Default built-in models ──────────────────────────────────────────────────
@@ -25,6 +28,7 @@ DEFAULT_MODELS = [
         "created": 1700000000,
         "capabilities": ["embeddings"],
         "context_window": 512,
+        "dimensions": 1024,
     },
     {
         "id": "hkunlp/instructor-large",
@@ -33,12 +37,13 @@ DEFAULT_MODELS = [
         "created": 1700000001,
         "capabilities": ["embeddings"],
         "context_window": 768,
+        "dimensions": 768,
     }
 ]
 
 class ModelManager:
     def __init__(self):
-        self._models: Dict[str, dict] = {}
+        self._models: dict[str, dict] = {}
         self._load_defaults()
         self._load_from_yaml()
 
@@ -58,12 +63,12 @@ class ModelManager:
                     if "id" in m:
                         self._models[m["id"]] = {**{"owned_by": "llm-serve", "created": int(time.time()), "capabilities": ["chat"]}, **m}
         except Exception as e:
-            print(f"[ModelManager] Warning: could not load models.yaml: {e}")
+            logger.warning("Could not load %s: %s", path, e)
 
-    def list_models(self) -> List[ModelCard]:
+    def list_models(self) -> list[ModelCard]:
         return [self._to_card(m) for m in self._models.values()]
 
-    def get_model(self, model_id: str) -> Optional[ModelCard]:
+    def get_model(self, model_id: str) -> ModelCard | None:
         m = self._models.get(model_id)
         if m is None:
             return None
@@ -72,7 +77,7 @@ class ModelManager:
     def model_exists(self, model_id: str) -> bool:
         return model_id in self._models
 
-    def get_model_info(self, model_id: str) -> Optional[dict]:
+    def get_model_info(self, model_id: str) -> dict | None:
         return self._models.get(model_id)
 
     def has_capability(self, model_id: str, capability: str) -> bool:
@@ -88,6 +93,10 @@ class ModelManager:
     def get_max_tokens(self, model_id: str) -> int:
         m = self._models.get(model_id, {})
         return m.get("max_tokens", 4096)
+
+    def get_embedding_dims(self, model_id: str) -> int | None:
+        """Native output size of an embedding model, if known."""
+        return self._models.get(model_id, {}).get("dimensions")
 
     def register_model(self, model_info: dict):
         """Dynamically register a new model."""

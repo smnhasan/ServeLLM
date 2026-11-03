@@ -1,9 +1,11 @@
+import asyncio
+import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -12,25 +14,37 @@ from app.core.config import settings
 from app.dependencies import APIError
 from app.routers.v1 import chat, completions, embeddings, models
 
+logger = logging.getLogger("llm_serve")
+
+
+def configure_logging() -> None:
+    """Set up root logging when the server starts (not at import time)."""
+    logging.basicConfig(
+        level=logging.DEBUG if settings.DEBUG else logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"[LLM Serve] Starting up — version {settings.APP_VERSION}")
-    print(f"[LLM Serve] Dummy mode: {settings.DUMMY_MODE}")
-    print(f"[LLM Serve] Rate limiting: {settings.RATE_LIMIT_ENABLED} ({settings.RATE_LIMIT_RPM} RPM)")
-    
+    configure_logging()
+    logger.info("Starting up — version %s", settings.APP_VERSION)
+    logger.info("Dummy mode: %s", settings.DUMMY_MODE)
+    logger.info("Rate limiting: %s (%s RPM)", settings.RATE_LIMIT_ENABLED, settings.RATE_LIMIT_RPM)
+
     if not settings.DUMMY_MODE:
         from app.services.inference import set_local_engine
         from app.services.local_engine import LocalInferenceEngine
-        print("[LLM Serve] Initializing local inference engine (downloading models if necessary)...")
-        engine = LocalInferenceEngine()
+        logger.info("Initializing local inference engine (downloading models if necessary)...")
+        # Model download/load is blocking; keep the event loop free.
+        engine = await asyncio.to_thread(LocalInferenceEngine)
         set_local_engine(engine)
-        print("[LLM Serve] Local inference engine ready.")
-        
+        logger.info("Local inference engine ready.")
+
     yield
-    print("[LLM Serve] Shutting down.")
+    logger.info("Shutting down.")
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -53,7 +67,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # Credentials can't be combined with a wildcard origin; auth uses a header anyway.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -90,7 +105,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     first = errors[0] if errors else {}
     param = ".".join(str(x) for x in first.get("loc", [])[1:]) or None
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         content={
             "error": {
                 "message": first.get("msg", "Validation error"),
@@ -127,7 +142,7 @@ app.include_router(embeddings.router, prefix=settings.API_V1_PREFIX, tags=["Embe
 # ─── Health / Info endpoints ──────────────────────────────────────────────────
 
 @app.get("/health", tags=["System"], summary="Health check")
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> dict[str, Any]:
     return {
         "status": "ok",
         "version": settings.APP_VERSION,
@@ -136,7 +151,7 @@ async def health_check() -> Dict[str, Any]:
 
 
 @app.get("/", tags=["System"], summary="Root / API info")
-async def root() -> Dict[str, Any]:
+async def root() -> dict[str, Any]:
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,

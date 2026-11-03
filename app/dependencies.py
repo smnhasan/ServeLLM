@@ -1,33 +1,15 @@
-from typing import Optional
+
 from fastapi import Header, Request, status
-from fastapi.responses import JSONResponse
 
 from app.services.auth import auth_service
+from app.utils.errors import APIError
 
-
-class APIError(Exception):
-    """OpenAI-style JSON error raised inside route handlers or dependencies."""
-    def __init__(self, message: str, error_type: str, code: str, status_code: int,
-                 param: str = None, headers: dict = None):
-        self.message = message
-        self.error_type = error_type
-        self.code = code
-        self.status_code = status_code
-        self.param = param
-        self.extra_headers = headers or {}
-
-    def to_response(self) -> JSONResponse:
-        return JSONResponse(
-            status_code=self.status_code,
-            content={"error": {"message": self.message, "type": self.error_type,
-                               "param": self.param, "code": self.code}},
-            headers=self.extra_headers,
-        )
+__all__ = ["APIError", "get_current_api_key"]
 
 
 async def get_current_api_key(
     request: Request,
-    authorization: Optional[str] = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> str:
     is_valid, api_key, error_msg = auth_service.verify_key(authorization)
 

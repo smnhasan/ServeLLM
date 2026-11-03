@@ -1,8 +1,16 @@
-import pytest
-from fastapi.testclient import TestClient
+import os
 
-from app.main import app
-from app.core.config import settings
+# Must be set before the app is imported: tests never load real models,
+# and the shared session client would otherwise trip the rate limiter.
+os.environ["DUMMY_MODE"] = "true"
+os.environ["DUMMY_LATENCY_MS"] = "0"
+os.environ["STREAM_CHUNK_DELAY_MS"] = "0"
+os.environ["RATE_LIMIT_ENABLED"] = "false"
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.main import app  # noqa: E402
 
 # ─── Valid test keys (from default config) ───────────────────────────────────
 VALID_KEY = "sk-llmserve-test-key-1234"
