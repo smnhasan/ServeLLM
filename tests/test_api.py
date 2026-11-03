@@ -191,6 +191,21 @@ class TestChatCompletions:
             r = client.post("/v1/chat/completions", json=payload, headers=AUTH_HEADERS)
             assert r.status_code == 200
 
+    def test_stream_engine_error_sends_error_event(self, client: TestClient, monkeypatch):
+        from app.services.inference import dummy_engine
+
+        async def failing_stream(*args, **kwargs):
+            yield "partial "
+            raise RuntimeError("engine crashed")
+
+        monkeypatch.setattr(dummy_engine, "stream_chat", failing_stream)
+        payload = {**self.BASE_PAYLOAD, "stream": True}
+        r = client.post("/v1/chat/completions", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 200
+        lines = [line for line in r.text.split("\n") if line.startswith("data:")]
+        assert '"engine_error"' in lines[-2]
+        assert lines[-1].strip() == "data: [DONE]"
+
     def test_multi_turn_conversation(self, client: TestClient):
         payload = {
             "model": "gpt-oss-20b",

@@ -112,22 +112,50 @@ class LocalInferenceEngine(LLMEngine):
             prompt = self._messages_to_prompt(messages)
             stops = self._stop_sequences(stop)
 
-            def _gen_llm():
-                with self.llm_lock:
-                    for output in self.llm(prompt, max_tokens=max_tokens, temperature=temperature, top_p=top_p, stop=stops, stream=True):
-                        yield output['choices'][0]['text']
-                        
-            iterator = _gen_llm()
-            sentinel = object()
+            # Generation runs entirely in one worker thread so llm_lock is acquired
+            # and released by the same thread. Tokens are handed to the event loop
+            # through a queue; `cancelled` stops the worker when the consumer goes
+            # away (e.g. client disconnect), which releases the lock.
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue = asyncio.Queue()
+            cancelled = threading.Event()
+            done = object()
+
+            def _put(item):
+                try:
+                    loop.call_soon_threadsafe(queue.put_nowait, item)
+                except RuntimeError:  # event loop already closed
+                    cancelled.set()
+
+            def _produce():
+                item = done
+                try:
+                    with self.llm_lock:
+                        stream = self.llm(prompt, max_tokens=max_tokens, temperature=temperature,
+                                          top_p=top_p, stop=stops, stream=True)
+                        try:
+                            for output in stream:
+                                if cancelled.is_set():
+                                    break
+                                _put(output['choices'][0]['text'])
+                        finally:
+                            stream.close()
+                except Exception as exc:
+                    item = exc
+                finally:
+                    _put(item)
+
+            threading.Thread(target=_produce, name="llm-stream", daemon=True).start()
             try:
                 while True:
-                    token = await asyncio.to_thread(next, iterator, sentinel)
-                    if token is sentinel:
+                    item = await queue.get()
+                    if item is done:
                         break
-                    yield token
+                    if isinstance(item, Exception):
+                        raise item
+                    yield item
             finally:
-                # Release llm_lock if the client disconnects mid-stream.
-                await asyncio.to_thread(iterator.close)
+                cancelled.set()
 
     async def complete(
         self,
