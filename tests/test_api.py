@@ -330,6 +330,12 @@ class TestEmbeddings:
         assert r.status_code == 200
         assert len(r.json()["data"][0]["embedding"]) == 256
 
+    def test_dimensions_above_native_size_rejected(self, client: TestClient):
+        payload = {**self.BASE_PAYLOAD, "dimensions": 4096}
+        r = client.post("/v1/embeddings", json=payload, headers=AUTH_HEADERS)
+        assert r.status_code == 400
+        assert r.json()["error"]["param"] == "dimensions"
+
     def test_token_id_input_rejected(self, client: TestClient):
         payload = {**self.BASE_PAYLOAD, "input": [1, 2, 3]}
         r = client.post("/v1/embeddings", json=payload, headers=AUTH_HEADERS)

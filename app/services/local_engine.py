@@ -194,12 +194,12 @@ class LocalInferenceEngine(LLMEngine):
 
             dims = kwargs.get("dimensions")
             
-            data_list = []
-            for vec in raw_vecs:
-                if dims is not None:
-                    vec = vec[:dims]
-                data_list.append(vec.tolist())
-            return data_list
+            if dims is not None:
+                # Truncated vectors must be re-normalized to stay unit length.
+                raw_vecs = raw_vecs[:, :dims]
+                norms = np.linalg.norm(raw_vecs, axis=1, keepdims=True)
+                raw_vecs = raw_vecs / np.where(norms == 0, 1, norms)
+            return raw_vecs.tolist()
 
     def _embed_e5(self, texts: list[str]) -> np.ndarray:
         with self.embed_e5_lock:

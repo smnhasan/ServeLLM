@@ -25,6 +25,10 @@ async def create_embeddings(
     if not model_manager.has_capability(request.model, "embeddings"):
         return error_response(f"Model '{request.model}' does not support embeddings.", param="model", code="model_not_supported")
 
+    native_dims = model_manager.get_embedding_dims(request.model)
+    if request.dimensions and native_dims and request.dimensions > native_dims:
+        return error_response(f"dimensions ({request.dimensions}) exceeds the model's output size ({native_dims}).", param="dimensions", code="invalid_request")
+
     if request.encoding_format == "base64":
         return error_response("encoding_format 'base64' is not supported; use 'float'.", param="encoding_format", code="invalid_request")
 

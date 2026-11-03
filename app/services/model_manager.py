@@ -28,6 +28,7 @@ DEFAULT_MODELS = [
         "created": 1700000000,
         "capabilities": ["embeddings"],
         "context_window": 512,
+        "dimensions": 1024,
     },
     {
         "id": "hkunlp/instructor-large",
@@ -36,6 +37,7 @@ DEFAULT_MODELS = [
         "created": 1700000001,
         "capabilities": ["embeddings"],
         "context_window": 768,
+        "dimensions": 768,
     }
 ]
 
@@ -91,6 +93,10 @@ class ModelManager:
     def get_max_tokens(self, model_id: str) -> int:
         m = self._models.get(model_id, {})
         return m.get("max_tokens", 4096)
+
+    def get_embedding_dims(self, model_id: str) -> int | None:
+        """Native output size of an embedding model, if known."""
+        return self._models.get(model_id, {}).get("dimensions")
 
     def register_model(self, model_info: dict):
         """Dynamically register a new model."""

@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 from app.core.config import settings
 from app.schemas.openai import ChatMessage
 from app.services.llm_engine import LLMEngine
+from app.services.model_manager import model_manager
 
 # ─── Dummy response templates ─────────────────────────────────────────────────
 
@@ -84,13 +85,6 @@ def _generate_embedding(text: str, dimensions: int = 1536) -> list[float]:
     if norm > 0:
         vec = [x / norm for x in vec]
     return vec
-
-
-# Native output sizes of the registered embedding models
-MODEL_EMBEDDING_DIMS = {
-    "intfloat/multilingual-e5-large": 1024,
-    "hkunlp/instructor-large": 768,
-}
 
 
 class DummyInferenceEngine(LLMEngine):
@@ -176,7 +170,7 @@ class DummyInferenceEngine(LLMEngine):
         **kwargs,
     ) -> list[list[float]]:
         await asyncio.sleep(settings.DUMMY_LATENCY_MS / 1000)
-        dims = MODEL_EMBEDDING_DIMS.get(model, 1024)
+        dims = model_manager.get_embedding_dims(model) or 1024
         if kwargs.get("dimensions"):
             dims = min(dims, kwargs["dimensions"])
         return [_generate_embedding(text, dims) for text in texts]

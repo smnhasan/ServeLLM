@@ -128,3 +128,14 @@ async def test_chat_uses_harmony_stop_tokens():
     engine = make_engine(llm)
     await engine.chat(MESSAGES, model="gpt-oss-20b")
     assert HARMONY_STOPS <= set(llm.calls[-1]["stop"])
+
+
+@pytest.mark.parametrize("model,dims", [
+    ("intfloat/multilingual-e5-large", 256),
+    ("hkunlp/instructor-large", 128),
+])
+async def test_truncated_embeddings_are_renormalized(model, dims):
+    engine = make_engine(FakeLlama())
+    vecs = await engine.embed(["hello", "world"], model=model, dimensions=dims)
+    assert all(len(v) == dims for v in vecs)
+    assert np.allclose(np.linalg.norm(np.array(vecs), axis=1), 1.0)
