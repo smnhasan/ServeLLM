@@ -206,6 +206,17 @@ class TestChatCompletions:
         assert '"engine_error"' in lines[-2]
         assert lines[-1].strip() == "data: [DONE]"
 
+    def test_engine_not_ready_returns_503(self, client: TestClient, monkeypatch):
+        from app.core.config import settings
+        from app.services import inference
+
+        monkeypatch.setattr(settings, "DUMMY_MODE", False)
+        monkeypatch.setattr(inference, "_local_engine", None)
+        r = client.post("/v1/chat/completions", json=self.BASE_PAYLOAD, headers=AUTH_HEADERS)
+        assert r.status_code == 503
+        assert r.json()["error"]["code"] == "engine_not_ready"
+        assert r.headers["retry-after"] == "10"
+
     def test_multi_turn_conversation(self, client: TestClient):
         payload = {
             "model": "gpt-oss-20b",

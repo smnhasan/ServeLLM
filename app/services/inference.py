@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.schemas.openai import ChatMessage
 from app.services.llm_engine import LLMEngine
 from app.services.model_manager import model_manager
+from app.utils.errors import APIError
 
 # ─── Dummy response templates ─────────────────────────────────────────────────
 
@@ -188,7 +189,13 @@ def get_engine() -> LLMEngine:
     if settings.DUMMY_MODE:
         return dummy_engine
     if _local_engine is None:
-        raise RuntimeError("Local engine not initialized. Ensure startup hook ran.")
+        raise APIError(
+            message="The model engine is still loading. Try again shortly.",
+            error_type="server_error",
+            code="engine_not_ready",
+            status_code=503,
+            headers={"Retry-After": "10"},
+        )
     return _local_engine
 
 def set_local_engine(engine: LLMEngine):

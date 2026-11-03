@@ -14,17 +14,22 @@ from app.core.config import settings
 from app.dependencies import APIError
 from app.routers.v1 import chat, completions, embeddings, models
 
-# ─── Lifespan ─────────────────────────────────────────────────────────────────
-
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
 logger = logging.getLogger("llm_serve")
 
 
+def configure_logging() -> None:
+    """Set up root logging when the server starts (not at import time)."""
+    logging.basicConfig(
+        level=logging.DEBUG if settings.DEBUG else logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+
+
+# ─── Lifespan ─────────────────────────────────────────────────────────────────
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()
     logger.info("Starting up — version %s", settings.APP_VERSION)
     logger.info("Dummy mode: %s", settings.DUMMY_MODE)
     logger.info("Rate limiting: %s (%s RPM)", settings.RATE_LIMIT_ENABLED, settings.RATE_LIMIT_RPM)
