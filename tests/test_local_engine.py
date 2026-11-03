@@ -112,3 +112,19 @@ async def test_stream_error_propagates_and_releases_lock():
     with pytest.raises(RuntimeError, match="boom"):
         await gen.__anext__()
     assert not engine.llm_lock.locked()
+
+
+async def test_completions_do_not_use_chat_stop_tokens():
+    llm = FakeLlama()
+    engine = make_engine(llm)
+    await engine.complete("Once upon a time", model="gpt-oss-20b", stop=["\n"])
+    assert llm.calls[-1]["stop"] == ["\n"]
+    await engine.complete("Once upon a time", model="gpt-oss-20b")
+    assert llm.calls[-1]["stop"] is None
+
+
+async def test_chat_uses_harmony_stop_tokens():
+    llm = FakeLlama()
+    engine = make_engine(llm)
+    await engine.chat(MESSAGES, model="gpt-oss-20b")
+    assert HARMONY_STOPS <= set(llm.calls[-1]["stop"])

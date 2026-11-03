@@ -68,8 +68,10 @@ class LocalInferenceEngine(LLMEngine):
         parts.append('<|start|>assistant<|channel|>final<|message|>')
         return ''.join(parts)
 
-    def _stop_sequences(self, stop: str | list[str] | None) -> list[str]:
-        defaults = ['<|end|>', '<|return|>', '<|start|>']
+    def _stop_sequences(self, stop: str | list[str] | None, chat: bool = True) -> list[str]:
+        # Harmony end-of-turn markers only make sense for chat-formatted prompts;
+        # raw /v1/completions prompts get just the caller's stop sequences.
+        defaults = ['<|end|>', '<|return|>', '<|start|>'] if chat else []
         if stop is None:
             return defaults
         if isinstance(stop, str):
@@ -168,7 +170,7 @@ class LocalInferenceEngine(LLMEngine):
         **kwargs,
     ) -> str:
         async with self.semaphore:
-            stops = self._stop_sequences(stop)
+            stops = self._stop_sequences(stop, chat=False) or None
             def _run_llm():
                 with self.llm_lock:
                     return self.llm(prompt, max_tokens=max_tokens, temperature=temperature, top_p=top_p, stop=stops)
